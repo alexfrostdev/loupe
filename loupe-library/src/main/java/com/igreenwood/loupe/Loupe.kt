@@ -471,6 +471,9 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                     if (endScale == minScale) {
                         zoomToTargetScale(minScale, focalX, focalY)
                         imageView.postInvalidate()
+                        onViewTranslateListener?.onRestore(imageView)
+                    } else {
+                        onViewTranslateListener?.onStart(imageView)
                     }
                 }
 
@@ -527,6 +530,9 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                         calcBounds()
                         constrainBitmapBounds()
                         imageView.postInvalidate()
+                        onViewTranslateListener?.onRestore(imageView)
+                    } else {
+                        onViewTranslateListener?.onStart(imageView)
                     }
                 }
 

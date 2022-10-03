@@ -23,6 +23,7 @@ import com.bumptech.glide.request.RequestListener
 import com.bumptech.glide.request.target.Target
 import com.igreenwood.loupe.Loupe
 import com.igreenwood.loupe.extensions.createLoupe
+import com.igreenwood.loupe.extensions.setOnScaleChangedListener
 import com.igreenwood.loupe.extensions.setOnViewTranslateListener
 import com.igreenwood.loupesample.R
 import com.igreenwood.loupesample.databinding.ActivityDetailBinding
@@ -194,6 +195,8 @@ class DetailActivity : AppCompatActivity() {
                                     onRestore = { showToolbar() },
                                     onDismiss = { finishAfterTransition() }
                                 )
+
+                                setOnScaleChangedListener { _, _, _ -> hideToolbar() }
                             }
 
                             loupeMap[position] = loupe
