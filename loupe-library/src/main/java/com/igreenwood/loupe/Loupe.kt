@@ -279,7 +279,7 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                         }
                     }
                     scale > minScale -> {
-                        zoomOutToMinimumScale(true)
+                        constrainBitmapBounds(true)
                     }
                     else -> {
                         zoomOutToMinimumScale(true)
@@ -878,17 +878,11 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
         oldBounds: RectF,
         newBounds: RectF
     ) {
-//        if (focalY > oldBounds.bottom) {
-//            val oldY = constrain(viewport.top, focalY, viewport.bottom)
-//            val newY = newBounds.bottom
-//            offsetBitmap(0f, oldY - newY)
-//        } else {
-            val oldX = constrain(viewport.left, focalX, viewport.right)
-            val oldY = constrain(viewport.top, focalY, viewport.bottom)
-            val newX = map(oldX, oldBounds.left, oldBounds.right, newBounds.left, newBounds.right)
-            val newY = map(oldY, oldBounds.top, oldBounds.bottom, newBounds.top, newBounds.bottom)
-            offsetBitmap(oldX - newX, oldY - newY)
-//        }
+        val oldX = constrain(viewport.left, focalX, viewport.right)
+        val oldY = constrain(viewport.top, focalY, viewport.bottom)
+        val newX = map(oldX, oldBounds.left, oldBounds.right, newBounds.left, newBounds.right)
+        val newY = map(oldY, oldBounds.top, oldBounds.bottom, newBounds.top, newBounds.bottom)
+        offsetBitmap(oldX - newX, oldY - newY)
     }
 
     private fun map(
