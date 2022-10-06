@@ -279,7 +279,7 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                         }
                     }
                     scale > minScale -> {
-                        constrainBitmapBounds(true)
+                        zoomOutToMinimumScale(true)
                     }
                     else -> {
                         zoomOutToMinimumScale(true)
