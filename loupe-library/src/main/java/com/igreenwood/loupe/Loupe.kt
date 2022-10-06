@@ -62,28 +62,40 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
 
     // max zoom(> 1f)
     var maxZoom = DEFAULT_MAX_ZOOM
+
     // use fling gesture for dismiss
     var useFlingToDismissGesture = true
+
     // flag to enable or disable drag to dismiss
     var useDragToDismiss = true
+
     // duration millis for dismiss animation
     var dismissAnimationDuration = DEFAULT_ANIM_DURATION
+
     // duration millis for restore animation
     var restoreAnimationDuration = DEFAULT_ANIM_DURATION
+
     // duration millis for image animation
     var flingAnimationDuration = DEFAULT_ANIM_DURATION
+
     // duration millis for double tap scale animation
     var scaleAnimationDuration = DEFAULT_ANIM_DURATION_LONG
+
     // duration millis for over scale animation
     var overScaleAnimationDuration = DEFAULT_ANIM_DURATION_LONG
+
     // duration millis for over scrolling animation
     var overScrollAnimationDuration = DEFAULT_ANIM_DURATION
+
     // view drag friction for swipe to dismiss(1f : drag distance == view move distance. Smaller value, view is moving more slower)
     var viewDragFriction = DEFAULT_VIEW_DRAG_FRICTION
+
     // drag distance threshold in dp for swipe to dismiss
     var dragDismissDistanceInDp = DEFAULT_DRAG_DISMISS_DISTANCE_IN_DP
+
     // on view translate listener
     var onViewTranslateListener: OnViewTranslateListener? = null
+
     // on scale changed
     var onScaleChangedListener: OnScaleChangedListener? = null
 
@@ -107,24 +119,40 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
 
     // bitmap matrix
     private var transfrom = Matrix()
+
     // bitmap scale
     private var scale = 1f
+
     // is ready for drawing bitmap
     private var isReadyToDraw = false
+
     // view rect - padding (recalculated on size changed)
     private var canvasBounds = RectF()
+
     // bitmap drawing rect (move on scroll, recalculated on scale changed)
     private var bitmapBounds = RectF()
+
     // displaying bitmap rect (does not move, recalculated on scale changed)
     private var viewport = RectF()
+
     // minimum scale of bitmap
     private var minScale = 1f
+
     // maximum scale of bitmap
     private var maxScale = 1f
+
     // bitmap (decoded) width
     private var imageWidth = 0f
+
     // bitmap (decoded) height
     private var imageHeight = 0f
+
+    private val maxDoubleTapScale get() = minScale * maxZoom * doubleTapZoomScale
+
+    // save zoom position to correct zoom out animation
+    private var isOverZoom: Boolean = false
+    private var overZoomFocalX: Float = 0f
+    private var overZoomFocalY: Float = 0f
 
     private val scroller: OverScroller
     private var originalViewBounds = Rect()
@@ -136,8 +164,10 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
     private var isBitmapTranslateAnimationRunning = false
     private var isBitmapScaleAnimationRunninng = false
     private var initialY = 0f
+
     // scaling helper
     private var scaleGestureDetector: ScaleGestureDetector? = null
+
     // translating helper
     private var gestureDetector: GestureDetector? = null
     private val onScaleGestureListener: ScaleGestureDetector.OnScaleGestureListener =
@@ -158,6 +188,11 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                 }
 
                 zoomToTargetScale(calcNewScale(scaleFactor), focalX, focalY)
+                if (scale > maxDoubleTapScale) {
+                    isOverZoom = true
+                    overZoomFocalX = focalX
+                    overZoomFocalY = focalY
+                }
 
                 return true
             }
@@ -196,6 +231,8 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                 velocityY: Float
             ): Boolean {
                 e1 ?: return true
+
+                if (scale > maxDoubleTapScale) return true
 
                 if (scale > minScale) {
                     processFlingBitmap(velocityX, velocityY)
@@ -267,6 +304,7 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
             // handle single touch gesture when scaling process is not running
             gestureDetector?.onTouchEvent(event)
         }
+
         when (event.action) {
             MotionEvent.ACTION_DOWN -> {
                 flingAnimator.cancel()
@@ -278,7 +316,11 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                             dismissOrRestoreIfNeeded()
                         }
                     }
-                    scale > minScale -> {
+                    isOverZoom && !isBitmapScaleAnimationRunninng -> {
+                        isOverZoom = false
+                        zoomOutToMinimumDoubleTapScale(overZoomFocalX, overZoomFocalY)
+                    }
+                    scale > minScale && scale <= maxDoubleTapScale -> {
                         constrainBitmapBounds(true)
                     }
                     else -> {
@@ -450,7 +492,7 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
     private fun zoomInToTargetScale(e: MotionEvent) {
         val imageView = imageViewRef.get() ?: return
         val startScale = scale
-        val endScale = minScale * maxZoom * doubleTapZoomScale
+        val endScale = maxDoubleTapScale
         val focalX = e.x
         val focalY = e.y
         ValueAnimator.ofFloat(startScale, endScale).apply {
@@ -534,6 +576,43 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                     } else {
                         onViewTranslateListener?.onStart(imageView)
                     }
+                }
+
+                override fun onAnimationCancel(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = false
+                }
+
+                override fun onAnimationRepeat(p0: Animator?) {
+                    // no op
+                }
+            })
+        }.start()
+    }
+
+    private fun zoomOutToMinimumDoubleTapScale(overZoomFocalX: Float, overZoomFocalY: Float) {
+        val imageView = imageViewRef.get() ?: return
+        val startScale = scale
+        val endScale = maxDoubleTapScale
+        val focalX = overZoomFocalX
+        val focalY = overZoomFocalY
+
+        ValueAnimator.ofFloat(startScale, endScale).apply {
+            duration = overScaleAnimationDuration
+            interpolator = overScaleAnimationInterpolator
+            addUpdateListener {
+                zoomToTargetScale(it.animatedValue as Float, focalX, focalY)
+                ViewCompat.postInvalidateOnAnimation(imageView)
+                setTransform()
+            }
+            addListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = true
+                }
+
+                override fun onAnimationEnd(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = false
+                    zoomToTargetScale(endScale, focalX, focalY)
+                    imageView.postInvalidate()
                 }
 
                 override fun onAnimationCancel(p0: Animator?) {
