@@ -37,7 +37,7 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
         const val DEFAULT_DRAG_DISMISS_DISTANCE_IN_DP = 96
         const val MAX_FLING_VELOCITY = 8000f
         const val MIN_FLING_VELOCITY = 1500f
-        const val DEFAULT_DOUBLE_TAP_ZOOM_SCALE = 0.9f
+        const val DEFAULT_DOUBLE_TAP_ZOOM_SCALE = 0.5f
         val DEFAULT_INTERPOLATOR = DecelerateInterpolator()
 
         fun create(
@@ -149,6 +149,11 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
 
     private val maxDoubleTapScale get() = minScale * maxZoom * doubleTapZoomScale
 
+    // save zoom position to correct zoom out animation
+    private var isOverZoom: Boolean = false
+    private var overZoomFocalX: Float = 0f
+    private var overZoomFocalY: Float = 0f
+
     private val scroller: OverScroller
     private var originalViewBounds = Rect()
     private var dragToDismissThreshold = 0f
@@ -183,6 +188,11 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                 }
 
                 zoomToTargetScale(calcNewScale(scaleFactor), focalX, focalY)
+                if (scale > maxDoubleTapScale) {
+                    isOverZoom = true
+                    overZoomFocalX = focalX
+                    overZoomFocalY = focalY
+                }
 
                 return true
             }
@@ -299,18 +309,17 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                     flingAnimator.cancel()
                 }
                 MotionEvent.ACTION_UP -> {
-                    val maxScaleWithoutPinZoom = min(maxDoubleTapScale, maxScale)
                     when {
                         scale == minScale -> {
                             if (!isViewTranslateAnimationRunning) {
                                 dismissOrRestoreIfNeeded()
                             }
                         }
-                        scale > minScale && scale < maxScaleWithoutPinZoom -> {
-                            zoomOutToMinimumScale(true)
-                        }
-                        scale >= maxScaleWithoutPinZoom -> {
+                        scale > minScale && scale <= maxDoubleTapScale -> {
                             constrainBitmapBounds(true)
+                        }
+                        isOverZoom -> {
+                            zoomOutToMinimumDoubleTapScale(overZoomFocalX, overZoomFocalY)
                         }
                         else -> {
                             zoomOutToMinimumScale(true)
@@ -565,6 +574,45 @@ class Loupe(imageView: ImageView, container: ViewGroup) : View.OnTouchListener,
                         onViewTranslateListener?.onRestore(imageView)
                     } else {
                         onViewTranslateListener?.onStart(imageView)
+                    }
+                }
+
+                override fun onAnimationCancel(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = false
+                }
+
+                override fun onAnimationRepeat(p0: Animator?) {
+                    // no op
+                }
+            })
+        }.start()
+    }
+
+    private fun zoomOutToMinimumDoubleTapScale(overZoomFocalX: Float, overZoomFocalY: Float) {
+        val imageView = imageViewRef.get() ?: return
+        val startScale = scale
+        val endScale = maxDoubleTapScale
+        val focalX = overZoomFocalX
+        val focalY = overZoomFocalY
+
+        ValueAnimator.ofFloat(startScale, endScale).apply {
+            duration = overScaleAnimationDuration
+            interpolator = overScaleAnimationInterpolator
+            addUpdateListener {
+                zoomToTargetScale(it.animatedValue as Float, focalX, focalY)
+                ViewCompat.postInvalidateOnAnimation(imageView)
+                setTransform()
+            }
+            addListener(object : Animator.AnimatorListener {
+                override fun onAnimationStart(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = true
+                }
+
+                override fun onAnimationEnd(p0: Animator?) {
+                    isBitmapScaleAnimationRunninng = false
+                    if (endScale == minScale) {
+                        zoomToTargetScale(minScale, focalX, focalY)
+                        imageView.postInvalidate()
                     }
                 }
 
